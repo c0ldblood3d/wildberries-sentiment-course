@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.12"
+          cache: poetry
+      - uses: snok/install-poetry@v1
+        with:
+          version: 2.5.1
+      - run: poetry install --sync --no-interaction
+      - run: poetry run ruff check src tests scripts
+      - run: poetry run pytest --junitxml=reports/junit.xml --cov=wb_sentiment --cov-report=term-missing --cov-report=xml:reports/coverage.xml --cov-fail-under=80
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-and-coverage-reports
+          path: reports/*.xml
+      - run: python scripts/make_smoke_model.py
+      - run: docker build -t wb-sentiment:${{ github.sha }} .
+      - run: bash scripts/docker_smoke.sh wb-sentiment:${{ github.sha }}
