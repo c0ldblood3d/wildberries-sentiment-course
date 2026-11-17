@@ -29,6 +29,6 @@ jobs:
         with:
           name: test-and-coverage-reports
           path: reports/*.xml
-      - run: python scripts/make_smoke_model.py
+      - run: poetry run python scripts/make_smoke_model.py
       - run: docker build -t wb-sentiment:${{ github.sha }} .
       - run: bash scripts/docker_smoke.sh wb-sentiment:${{ github.sha }}
