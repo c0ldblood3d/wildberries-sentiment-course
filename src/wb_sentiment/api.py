@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from functools import lru_cache
-from pathlib import Path
 from typing import Literal
 
 import joblib
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
+
+from wb_sentiment.config import load_config, resolve_path
 
 app = FastAPI(title="Wildberries Review Sentiment API", version="1.0.0")
 
@@ -35,7 +36,8 @@ class PredictResponse(BaseModel):
 
 @lru_cache(maxsize=1)
 def get_bundle() -> dict:
-    path = Path(os.getenv("MODEL_PATH", "artifacts/final_model.joblib"))
+    config = load_config()
+    path = resolve_path(os.getenv("MODEL_PATH", config["inference"]["model_path"]))
     if not path.exists():
         raise FileNotFoundError(f"Файл модели не найден: {path}")
     return joblib.load(path)

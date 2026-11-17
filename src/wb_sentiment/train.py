@@ -16,13 +16,15 @@ from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.svm import LinearSVC
 
+from wb_sentiment.config import load_config, resolve_path
 from wb_sentiment.data import CLASS_ORDER, grouped_split, sha256
 
 ROOT = Path(__file__).resolve().parents[2]
-DATA_PATH = ROOT / "data/versions/v2.csv"
-ARTIFACT_DIR = ROOT / "artifacts"
-REPORT_DIR = ROOT / "reports"
-SEED = 42
+CONFIG = load_config()
+DATA_PATH = resolve_path(CONFIG["train"]["data_path"])
+ARTIFACT_DIR = resolve_path(CONFIG["train"]["artifact_dir"])
+REPORT_DIR = resolve_path(CONFIG["train"]["report_dir"])
+SEED = CONFIG["train"]["seed"]
 
 
 def build_models() -> dict[str, tuple[Pipeline, dict[str, object]]]:
@@ -78,7 +80,7 @@ def main() -> None:
     ARTIFACT_DIR.mkdir(exist_ok=True)
     REPORT_DIR.mkdir(exist_ok=True)
     frame = pd.read_csv(DATA_PATH)
-    partitions = grouped_split(frame)
+    partitions = grouped_split(frame, seed=SEED)
     x_train = partitions["train"]["review_text"].tolist()
     y_train = partitions["train"]["sentiment"].tolist()
     x_val = partitions["validation"]["review_text"].tolist()
@@ -90,11 +92,12 @@ def main() -> None:
 
     default_tracking_uri = f"sqlite:///{ROOT / 'mlflow.db'}"
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", default_tracking_uri))
-    mlflow.set_experiment("wildberries-sentiment")
+    mlflow.set_experiment(CONFIG["train"]["experiment_name"])
     outcomes = []
     chosen = None
     for name, (model, params) in build_models().items():
         with mlflow.start_run(run_name=name) as run:
+            mlflow.log_dict(CONFIG, "config.json")
             mlflow.log_params({**params, "split_seed": SEED, "split": "70/10/20 grouped by product_id"})
             mlflow.set_tags({"git_commit": git_revision(), "dataset_sha256": sha256(DATA_PATH)})
             model.fit(x_train, y_train)
@@ -144,6 +147,7 @@ def main() -> None:
     model_path = ARTIFACT_DIR / "final_model.joblib"
     joblib.dump(bundle, model_path)
     with mlflow.start_run(run_name=f"final-{chosen['name']}"):
+        mlflow.log_dict(CONFIG, "config.json")
         mlflow.log_params({"selected_model": chosen["name"], "data_version": "v2", "seed": SEED})
         mlflow.log_metrics({**test_metrics, "validation_macro_f1": chosen["score"]})
         mlflow.set_tags({"git_commit": git_revision(), "dataset_sha256": sha256(DATA_PATH)})

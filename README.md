@@ -21,15 +21,19 @@ PYTHONPATH=src poetry run python -m wb_sentiment.train
 
 ## Эксперименты и данные
 
-Сравниваются три модели на одинаковом групповом разбиении 70/10/20 по `product_id`: word TF-IDF + Logistic Regression (`C=1`), word TF-IDF + Logistic Regression (`C=3`), word+character TF-IDF + LinearSVC. Модель выбирается по macro F1 на validation; test используется один раз после выбора. Каждая попытка записывается в локальный MLflow tracking store (`mlruns/`) с параметрами, метриками, SHA данных и Git revision. Итоги доступны в `reports/experiments.csv`, метрики теста — в `reports/test_report.json`, выбранный bundle — в `artifacts/final_model.joblib`.
+Сравниваются три модели на одинаковом групповом разбиении 70/10/20 по `product_id`: word TF-IDF + Logistic Regression (`C=1`), word TF-IDF + Logistic Regression (`C=3`), word+character TF-IDF + LinearSVC. Модель выбирается по macro F1 на validation; test используется один раз после выбора. Каждая попытка записывается в локальный MLflow tracking store (`mlflow.db`) с параметрами, метриками, SHA данных и Git revision. Итоги доступны в `reports/experiments.csv`, метрики теста — в `reports/test_report.json`, выбранный bundle — в `artifacts/final_model.joblib`.
 
 ```bash
 poetry run mlflow ui --backend-store-uri sqlite:///./mlflow.db --host 127.0.0.1
 ```
 
-В браузере откройте `http://127.0.0.1:5000`. Runs хранятся в локальной базе `mlflow.db`, artifacts — в `mlartifacts/`; для преподавателя их нужно перенести в доступное ему хранилище и указать ссылку в `REPORT.md`.
+В браузере откройте `http://127.0.0.1:5000`. Runs хранятся в локальной базе `mlflow.db`, artifacts — в `mlruns/`; переносимый снимок опубликован в `experiment-evidence.zip` в [релизе v1.0.0](https://github.com/c0ldblood3d/wildberries-sentiment-course/releases/tag/v1.0.0). Распакуйте архив в отдельную папку, выполните `python relocate.py` и запустите MLflow из этой папки через окружение проекта. Experiment ID: `1`.
 
 На итоговом запуске лучший run — `dc94e7f4625c45ed93bb953c01e143d1` (validation macro F1 `0.6536`). Итоговый artifact run — `f92bdf85627149dfac8f5f72fd2ec739`; test macro F1 `0.6276`, accuracy `0.8194`, weighted F1 `0.8247`.
+
+## Конфигурация
+
+Формат настроек — TOML. В `config.toml` раздел `train` задаёт пути к исходнику и подготовленным данным, seed разбиения, папки результатов и имя эксперимента; раздел `inference` задаёт путь к модели. Относительные пути разрешаются от корня проекта. `WB_CONFIG_PATH` выбирает другой файл конфигурации, `MODEL_PATH` переопределяет модель, `MLFLOW_TRACKING_URI` — хранилище экспериментов. Образец переменных находится в `.env.example`; файл `.env` автоматически не загружается. Обязательные поля конфигурации проверяются при чтении. Будущие запуски сохраняют конфигурацию в MLflow как `config.json`; параметры ранее проведённых экспериментов находятся в их params/tags.
 
 ## Проверки
 
@@ -62,9 +66,11 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 ## Docker
 
-Сначала обучите модель, затем соберите и запустите контейнер:
+Скачайте модель из релиза командой ниже или обучите её, затем соберите и запустите контейнер:
 
 ```bash
+curl -fL https://github.com/c0ldblood3d/wildberries-sentiment-course/releases/download/v1.0.0/final_model.joblib -o artifacts/final_model.joblib
+# SHA-256: 4d661f83494874ac25e8e5aa2403b7206eb5479395a2bd0648e3071b61116e4d
 docker build -t wb-sentiment:1.0.0 .
 docker run --rm -p 8000:8000 wb-sentiment:1.0.0
 bash scripts/docker_smoke.sh wb-sentiment:1.0.0
@@ -105,4 +111,16 @@ REPORT.md          контрольный список материалов сд
 
 ## Сдача
 
-Отчёт находится в `REPORT.md`, сценарий записи видео — в `DEMO_SCRIPT.md`. Модельный артефакт и данные не включены в Git: итоговый `artifacts/final_model.joblib` будет приложен к GitHub Release. После публикации проверьте CI и добавьте ссылки на репозиторий, релиз, pipeline и видео в отчёт.
+Отчёт находится в `REPORT.md`, сценарий записи видео — в `DEMO_SCRIPT.md`. Модельный артефакт и данные не включены в Git: итоговый `artifacts/final_model.joblib` доступен в [релизе v1.0.0](https://github.com/c0ldblood3d/wildberries-sentiment-course/releases/tag/v1.0.0). Результаты, manifest данных, исходный код обучения и переносимый снимок MLflow приложены к этому же релизу. Состояние автоматических проверок: [GitHub Actions](https://github.com/c0ldblood3d/wildberries-sentiment-course/actions). Видео записывается отдельно по сценарию.
+
+## CI
+
+```mermaid
+flowchart LR
+    Push["Push / Pull request"] --> Install["Python + Poetry + lock"]
+    Install --> Lint["Ruff"] --> Tests["pytest + coverage ≥80%"]
+    Tests --> SmokeModel["Учебная модель для проверки контракта"]
+    SmokeModel --> Build["Docker build"] --> HTTP["health + predict + docs + 422"]
+```
+
+Код обучения исходного артефакта зафиксирован в `training-source.zip` в релизе; его commit SHA указан в `release-manifest.json`. Публикация через веб-интерфейс создала отдельную историю GitHub; код обучения сохранён с исходными идентификаторами в архиве. Доработки конфигурации и документации оформляются отдельным pull request.
