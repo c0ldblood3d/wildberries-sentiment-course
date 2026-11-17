@@ -1,0 +1,11 @@
+[train]
+source_path = "data/raw/filtered.csv"
+data_path = "data/versions/v2.csv"
+versions_dir = "data/versions"
+artifact_dir = "artifacts"
+report_dir = "reports"
+seed = 42
+experiment_name = "wildberries-sentiment"
+
+[inference]
+model_path = "artifacts/final_model.joblib"

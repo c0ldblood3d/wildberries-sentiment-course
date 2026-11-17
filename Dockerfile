@@ -9,6 +9,7 @@ COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --disable-pip-version-check --timeout=120 --retries=5 -r requirements.txt \
     && groupadd --system app && useradd --system --gid app --home-dir /app app
 
+COPY config.toml ./config.toml
 COPY src ./src
 COPY artifacts/final_model.joblib ./artifacts/final_model.joblib
 ENV PYTHONPATH=/app/src
